@@ -33,3 +33,4 @@ echo "#!/bin/sh" > /root/logfiles2syslog.run
 echo "/usr/local/bin/logfiles2syslog.pl" >> /root/logfiles2syslog.run
 chmod +x /root/logfiles2syslog.run
 mv /root/logfiles2syslog.run /etc/service/logfiles2syslog/run
+
