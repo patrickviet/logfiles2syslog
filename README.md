@@ -30,7 +30,21 @@ Then run it with some kind of daemon wrapper, ie. runit
 apt-get install runit
 mkdir /etc/service/logfiles2syslog
 echo "#!/bin/sh" > /root/logfiles2syslog.run
-echo "/usr/local/bin/logfiles2syslog.pl" >> /root/logfiles2syslog.run
+echo "/usr/local/bin/logfiles2syslog.pl | logger -t logfiles2syslog" >> /root/logfiles2syslog.run
 chmod +x /root/logfiles2syslog.run
 mv /root/logfiles2syslog.run /etc/service/logfiles2syslog/run
 
+Real life usage example with the RAILO Java Coldfusion interpreter
+------------------------------------------------------------------
+
+Railo writes logs in appdir/WEB-INF/logs/
+You can change the directory, but you can't change the fact that it's log files
+
+So here is appropriate config:
+
+FILE: /etc/logfiles2syslog.conf.d/myrailoapp.conf
+watchdir = /srv/www/mysite/WEB-INF/logs
+watchpattern = .log
+
+And ... that's it
+You can now use syslog options and so on to be able to distribute railo logs to a central server.
