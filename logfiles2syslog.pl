@@ -3,7 +3,34 @@
 # -----------------------------------------------------------------------------
 # logfiles2syslog.pl
 # Patrick Viet 2012 - patrick.viet@gmail.com
-# http://github.
+# GITHUB PUBLIC REPO: http://github.com/patrickviet/logfiles2syslog
+#
+# USAGE: ./logfiles2syslog.pl [<config file>]
+# Default config file: /etc/logfiles2syslog.conf
+#
+# Config file format (good old windows ini-style)
+# 
+# [base]
+# includedir = /etc/logfiles2syslog.d/
+# rewatch_interval = 100
+# rewatch_interval_on_error = 10
+#
+# [sometag]
+# watchdir = /path/to/dir
+# watchpattern = .log
+#
+# # if you want to watch a single file
+# # internally, it actually just sets the directory to base, and the pattern
+# # to the file name
+# [someothertag]
+# watchfile = /some/log/file.log
+#
+# -----------------------------------------------------------------------------
+# include files:
+# if you put a section name, it will use it, otherwise it will use the base
+# of the filename as a section name, ie. myapp.conf with watchdir = /my/app
+# is equivalent to having [myapp], watchdir = /my/app in the main config file
+#
 # -----------------------------------------------------------------------------
 
 use warnings;
@@ -141,49 +168,3 @@ sub ev_process {
 
 
 $poe_kernel->run;
-
-
-=head
-
-$inotify->watch('/var/log', IN_ALL_EVENTS);
-
-
-while() {
-	my @events = $inotify->read;
-	unless (@events > 0) {
-		print "read error: $!";
-		last ;
-	}
-	foreach (@events) {
-
-		print $_->fullname.' '.$_->name." ";
-
-		if($_->IN_ACCESS) {
-			print "IN_ACCESS\n";
-		}
-		elsif($_->IN_MODIFY) {
-			print "IN_MODIFY\n";
-		}
-		elsif($_->IN_OPEN) {
-			print "IN_OPEN\n";
-		}
-		elsif($_->IN_CLOSE_WRITE) {
-			print "IN_CLOSE_WRITE\n";
-		}
-		elsif($_->IN_CLOSE_NOWRITE) {
-			print "IN_CLOSE_NOWRITE\n";
-		}
-		elsif($_->IN_CREATE) {
-			print "IN_CREATE\n";
-		}
-		elsif($_->IN_ISDIR) {
-			print "IN_ISDIR\n";
-		}
-		else {
-			print "UNWATCHED EVENT\n";
-		}
-
-		$inotify->watch('/var/log', IN_ALL_EVENTS) or die "unable to watch: $!";
-
-	}
-}
