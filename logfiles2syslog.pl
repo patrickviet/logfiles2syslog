@@ -135,15 +135,39 @@ sub loadconfig {
 	foreach(keys %dirs) {
 		if(!exists $newdirs{$_}) {
 			$watchers{$_}->cancel;
+			print "configuration change: not watching $_ anymore\n";
 		}
 	}
 
-	# 
+	foreach(keys %newdirs) {
+		if(!exists $dirs{$_}) {
+			print "configuration change: adding a watch to $_ with pattern ".$newdirs{$_}."\n";
+		}
+	}
+
+	%dirs = %newdirs;
+
+	# close files that don't match anymore
+	foreach (keys %openfiles) {
+		m/(.*)\/([^\/]+)$/;
+		my ($dir,$file) = ($1,$2);
+		if(exists $dirs{$dir}) {
+			my $pattern = $dirs{$dir};
+			if(!$file =~ m/$pattern$/) {
+				# doesnt match pattern anymore
+				my $fh = delete $openfiles{$_};
+				close $fh;
+			}
+		} else {
+			my $fh = delete $openfiles{$_};
+			close $fh;
+		}
+	}
 
 }
 
 sub loadconfig_section {
-	my ($name,$section) = shift;
+	my ($name,$section) = @_;
 	# we are looking for watchdir/watchpattern OR watchfile
 	if(exists $section->{watchfile}) {
 		die "you must choose watchdir/watchpattern or just watchfile in section $name"
@@ -154,9 +178,11 @@ sub loadconfig_section {
 		open TESTOPEN, $section->{watchfile} or die "unable to open file ".$section->{watchfile}." specified in section $name: $!";
 		close TESTOPEN;
 
-		$section->{watchfile} =~ m/(.*)\/([^\/])$/;
+		$section->{watchfile} =~ m/(.*)\/([^\/]+)$/;
 		@{$section}{'watchdir','watchpattern'} = ($1,$2); # weird syntax eh?
 	}
+
+	foreach(qw(watchdir watchpattern)) { die "no $_ param in section $name" unless exists $section->{$_}; }
 
 	die "non existent directory ".$section->{watchdir}." specified in section $name" unless -d $section->{watchdir};
 	die "no pattern specified in section $name" unless $section->{watchpattern};
@@ -168,10 +194,6 @@ sub loadconfig_section {
 
 loadconfig();
 $firstload = 0;
-
-
-exit;
-
 
 # -----------------------------------------------------------------------------
 # GENERIC LOOP
@@ -215,6 +237,8 @@ POE::Session->create(
 		'_start' => \&start,
 		'ev' => \&ev_process,
 		'watchdirs' => \&watchdirs,
+		'sighup' => \&sighup,
+		'reload' => \&reload,
 	}
 );
 
@@ -222,10 +246,23 @@ sub start {
 	#print "starting\n";
 	my $kernel = $_[KERNEL];
 	open my $inotify_FH, "< &=" . $inotify->fileno or die "Can’t fdopen: $!\n";
+	$kernel->sig('HUP','sighup');
 	$kernel->select_read($inotify_FH,'ev');
 	$kernel->yield('watchdirs');
 }
 
+sub sighup {
+	my $kernel = $_[KERNEL];
+	print "got HUP signal - triggering reload\n";
+	$kernel->sig_handled();
+	$kernel->yield('reload');
+}
+
+sub reload {
+	my $kernel = $_[KERNEL];
+	loadconfig();
+	$kernel->yield('watchdirs',1);
+}
 sub watchdirs {
 	my ($kernel,$runonce) = @_[KERNEL,ARG0];
 	#print "watchdirs\n";
@@ -234,7 +271,7 @@ sub watchdirs {
 		my $pattern = $dirs{$dir};
 		if (opendir(my $dh,$dir)) {
 			foreach(readdir $dh) {
-				if(m/\$pattern$/) {
+				if(m/$pattern$/) {
 					# it's a log file
 					my $fullname = "$dir/$_";
 					tailfile($fullname);
@@ -254,7 +291,8 @@ sub watchdirs {
 		$watchers{$dir} = $watcher;
 		
 	}
-	$kernel->delay_set('watchdirs',$err?10:100) unless $runonce;
+	$kernel->delay_set('watchdirs',$err?$conf->{base}->{rewatch_interval_on_err}:$conf->{base}->{rewatch_interval})
+		unless $runonce;
 }
 
 sub ev_process {
@@ -270,8 +308,23 @@ sub ev_process {
 
 		if (!$ev->IN_ISDIR) {
 
-			if($fullname =~ m/\.log$/) {
-				# only watch .log files
+			# lets just check what the pattern match is
+			my $watcher = $ev->w;
+			my $dir = $watcher->name;
+			my $pattern;
+			if(exists $watchers{$dir} and exists $dirs{$dir}) {
+				$pattern = $dirs{$dir};
+			} else {
+				$watcher->cancel;
+				delete $dirs{$dir};
+				delete $watchers{$dir};
+				warn "RED FLAG: event for dir $dir ignored because not in conf";
+				$kernel->yield('watchdirs');
+				next;
+			}
+
+			if($ev->name =~ m/$pattern$/) {
+				# we're ignoring other files
 
 				if($ev->IN_MODIFY) {
 					tailfile($fullname);
