@@ -27,8 +27,8 @@
 #
 # -----------------------------------------------------------------------------
 # include files:
-# if you put a section name, it will use it, otherwise it will use the base
-# of the filename as a section name, ie. myapp.conf with watchdir = /my/app
+# it will use the base of the filename as a section name,
+# ie. myapp.conf with watchdir = /my/app
 # is equivalent to having [myapp], watchdir = /my/app in the main config file
 #
 # -----------------------------------------------------------------------------
@@ -50,22 +50,7 @@ if (scalar @ARGV) {
 	$cfile = shift @ARGV;
 }
 
-# load config
-my $conf;
-sub loadconfig {
-	$conf = Config::Tiny->read($cfile) or die "unable to open file $cfile: ".Config::Tiny->errstr;
-
-	die "no \[base\] section in config file $cfile" unless exists $conf->{base};
-	foreach (qw(rewatch_interval rewatch_interval_on_error includedir)) {
-		die "no $_ param in \[base\]" unless exists $conf->{base}->{$_};
-	}
-}
-
-loadconfig();
-
-exit;
-
-
+# build inotify and socks and stuff
 setlogsock('unix');
 openlog('filedump', 'cons', 'notice');
 
@@ -73,10 +58,119 @@ my $inotify = new Linux::Inotify2
 	or die "unable to create Inotify object: $?";
 $inotify->blocking(0);
 
-my @dirs = ();
-my %openfiles = qw();
-#my $filematch = m/\.log$/;
+my %dirs = ();
+my %watchers = ();
+my %openfiles = ();
 
+# load config
+my $conf;
+my $firstload = 1;
+sub loadconfig {
+	my $newconf;
+	my %newdirs = ();
+	eval {
+		$newconf = Config::Tiny->read($cfile) or die "unable to open file $cfile: ".Config::Tiny->errstr;
+
+		die "no \[base\] section in config file $cfile" unless exists $newconf->{base};
+		foreach (qw(rewatch_interval rewatch_interval_on_error includedir)) {
+			die "$_ param absent from \[base\]" unless exists $newconf->{base}->{$_};
+			die "$_ param unset in \[base\]" if $newconf->{base}->{$_} eq '';
+		}
+
+		foreach(qw(rewatch_interval rewatch_interval_on_error)) {
+			die "param $_ is not numeric integer" if $newconf->{base}->{$_} =~ m/[^0-9]/;
+		}
+
+		my $incdir = $newconf->{base}->{includedir};
+		die "no such include directory $incdir in $cfile" unless -d $incdir;
+
+		## load main section
+		foreach(keys %$newconf) {
+			next if $_ eq 'base';
+			die "you can't put params with no section in $cfile" if $_ eq '_';
+
+			# 1st part duplicate code
+			my $sectionconfig = loadconfig_section($_,$newconf->{$_});
+			my ($dir,$pattern) = @$sectionconfig;
+			die "double config for directory $dir" if exists $newdirs{$dir};
+			$newdirs{$dir} = $pattern;
+
+		}
+
+		## load other sections
+		opendir(my $dh, $incdir) or die "unable to open include dir $incdir specified in $cfile";
+		foreach(readdir $dh) {
+			next unless m/(.*)\.conf$/;
+			my $namebase = $1;
+			my $incfile = "$incdir/$_";
+			next unless -f $incfile;
+
+			my $newsection = Config::Tiny->read($incfile) or die "unable to read include file $incfile";
+			foreach(keys %${newsection}) {
+				my $name = $namebase;
+				if($_ ne '_') { $name = $namebase.'_'.$_; }
+
+				# this is duplicate code but whatever it's only 4 lines
+				my $sectionconfig = loadconfig_section($name,$newsection->{$_});
+				my ($dir,$pattern) = @$sectionconfig;
+				die "double config for directory $dir" if exists $newdirs{$dir};
+				$newdirs{$dir} = $pattern;
+			}
+
+		}
+		closedir($dh);
+	};
+
+	if ($@) {
+		if ($firstload) {
+			die "unable to init app, dying: $@";
+		} else {
+			warn "unable to reload newconf - keeping old conf: $@"; return;
+		}
+	}
+
+	$conf = $newconf;
+
+	# unwatch directories that don't exist anymore
+	foreach(keys %dirs) {
+		if(!exists $newdirs{$_}) {
+			$watchers{$_}->cancel;
+		}
+	}
+
+	# 
+
+}
+
+sub loadconfig_section {
+	my ($name,$section) = shift;
+	# we are looking for watchdir/watchpattern OR watchfile
+	if(exists $section->{watchfile}) {
+		die "you must choose watchdir/watchpattern or just watchfile in section $name"
+			if exists $section->{watchdir} or exists $section->{watchpattern};
+
+		die "non existent file ".$section->{watchfile}." specified in section $name" unless -f $section->{watchfile};
+		# try to open it just to be sure
+		open TESTOPEN, $section->{watchfile} or die "unable to open file ".$section->{watchfile}." specified in section $name: $!";
+		close TESTOPEN;
+
+		$section->{watchfile} =~ m/(.*)\/([^\/])$/;
+		@{$section}{'watchdir','watchpattern'} = ($1,$2); # weird syntax eh?
+	}
+
+	die "non existent directory ".$section->{watchdir}." specified in section $name" unless -d $section->{watchdir};
+	die "no pattern specified in section $name" unless $section->{watchpattern};
+
+	# I prefer to return a ref to a table rather than an actual table, its less messy
+	return [ $section->{watchdir}, $section->{watchpattern} ];
+
+}
+
+loadconfig();
+$firstload = 0;
+
+
+exit;
 
 
 # -----------------------------------------------------------------------------
@@ -94,6 +188,12 @@ sub tailfile {
 			}
 		}
 	}
+
+	# FIXME: must check for race condition where this happens
+	# a file has been closed because it's not watched anymore, but
+	# it get a notification that happened during the close
+
+	# according to documentation it empties the queue though...
 
 	if(!exists $openfiles{$file}) {
 		# lets open the file and tail it
@@ -130,10 +230,11 @@ sub watchdirs {
 	my ($kernel,$runonce) = @_[KERNEL,ARG0];
 	#print "watchdirs\n";
 	my $err = 0;
-	foreach my $dir (@dirs) {
+	foreach my $dir (keys %dirs) {
+		my $pattern = $dirs{$dir};
 		if (opendir(my $dh,$dir)) {
 			foreach(readdir $dh) {
-				if(m/\.log$/) {
+				if(m/\$pattern$/) {
 					# it's a log file
 					my $fullname = "$dir/$_";
 					tailfile($fullname);
@@ -144,7 +245,14 @@ sub watchdirs {
 			print "error opening directory $dir: $!\n";
 			$err = 1;
 		}
-		$inotify->watch($dir, IN_MODIFY | IN_DELETE);
+
+		# I can watch multiple times without consequence
+		# inotify_add_watch(7) says that:
+		# "If pathname was already being watched, then the descriptor for the existing watch is returned"
+
+		my $watcher = $inotify->watch($dir, IN_MODIFY | IN_DELETE);
+		$watchers{$dir} = $watcher;
+		
 	}
 	$kernel->delay_set('watchdirs',$err?10:100) unless $runonce;
 }
