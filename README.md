@@ -38,10 +38,7 @@ Run
 Then run it with some kind of daemon wrapper, ie. runit
 apt-get install runit
 mkdir /etc/service/logfiles2syslog
-echo "#!/bin/sh" > /root/logfiles2syslog.run
-echo "/usr/local/bin/logfiles2syslog.pl | logger -t logfiles2syslog" >> /root/logfiles2syslog.run
-chmod +x /root/logfiles2syslog.run
-mv /root/logfiles2syslog.run /etc/service/logfiles2syslog/run
+cp logfiles2syslog.runit /etc/service/logfiles2syslog/run
 
 Real life usage example with the RAILO Java Coldfusion interpreter
 ------------------------------------------------------------------
