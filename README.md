@@ -41,6 +41,12 @@ For now just files /etc/logfiles2syslog.conf and /etc/logfiles2syslog.d/*.conf
 They contain a list of directories in which to watch *.log, within sections
 (FIXME: will add some extra pattern matching options)
 
+Just look at the logfiles2syslog.conf example, it's very simple/explicit
+You options are either watchfile or watchdir+watchpattern
+
+Leave the two rewatch variables as is
+
+
 
 Real life usage example with the RAILO Java Coldfusion interpreter
 ------------------------------------------------------------------
