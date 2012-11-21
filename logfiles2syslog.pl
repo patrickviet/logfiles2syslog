@@ -35,7 +35,6 @@
 
 use warnings;
 use strict;
-use Sys::Syslog qw( :DEFAULT setlogsock );
 use Linux::Inotify2;
 use POE;
 use Fcntl qw(:seek);
@@ -50,9 +49,7 @@ if (scalar @ARGV) {
 	$cfile = shift @ARGV;
 }
 
-# build inotify and socks and stuff
-setlogsock('unix');
-openlog('filedump', 'cons', 'notice');
+# build inotify and stuff
 
 my $inotify = new Linux::Inotify2
 	or die "unable to create Inotify object: $?";

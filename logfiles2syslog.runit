@@ -1,0 +1,4 @@
+#!/bin/sh
+
+/usr/local/bin/logfiles2syslog.pl | logger -t logfiles2syslog
+
