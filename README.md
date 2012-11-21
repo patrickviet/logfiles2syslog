@@ -3,12 +3,21 @@ logfiles2syslog
 
 inotify based perl tool that logs files and pushes their content to syslog
 
+Licence
+-------
+BSD licence. Basically I guarantee nothing, and you can do what you want with it, as long as you give me credit, keep this notice, don't say you made it or use my name/the name of the product to endorse something you made.
 
 Requirements
 ------------
 
+This only runs on Linux with inotify (2.6.13 and onwards - anything released after 2005 should be OK)
+It does NOT run on MacOSX, xBSD or Windows. Adapt it if you want to use kqueue
+
 (Debian/Ubuntu) : base perl + Linux::Inotify2 + POE + Config::Tiny
 apt-get install liblinux-inotify2-perl libpoe-perl libconfig-tiny-perl
+
+Obviously it also run just the same on any kind of Linux such as Red Hat, CentOS, ...
+I just don't know the names of the packages
 
 Configuration
 -------------
