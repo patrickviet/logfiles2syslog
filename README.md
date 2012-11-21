@@ -19,6 +19,21 @@ apt-get install liblinux-inotify2-perl libpoe-perl libconfig-tiny-perl
 Obviously it also run just the same on any kind of Linux such as Red Hat, CentOS, ...
 I just don't know the names of the packages
 
+
+Installation
+------------
+
+Copy logfiles2syslog.pl file to /usr/local/bin/
+Copy base config file to /etc/logfiles2syslog.conf
+Create directory /etc/logfiles2syslog.conf.d/
+Put any extra something.conf file in this directory /etc/logfiles2syslog.conf.d/
+
+Then run it with some kind of daemon wrapper, ie. runit
+apt-get install runit
+mkdir /etc/service/logfiles2syslog
+cp logfiles2syslog.runit /etc/service/logfiles2syslog/run
+
+
 Configuration
 -------------
 
@@ -26,19 +41,6 @@ For now just files /etc/logfiles2syslog.conf and /etc/logfiles2syslog.d/*.conf
 They contain a list of directories in which to watch *.log, within sections
 (FIXME: will add some extra pattern matching options)
 
-Installation
-------------
-
-Copy file to /usr/local/bin/logfiles2syslog.pl (don't forget chmod 755)
-Copy base config file to /etc/logfiles2syslog.conf
-Create directory /etc/logfiles2syslog.conf.d/
-Put any extra something.conf file in this directory /etc/logfiles2syslog.conf.d/
-Run
-
-Then run it with some kind of daemon wrapper, ie. runit
-apt-get install runit
-mkdir /etc/service/logfiles2syslog
-cp logfiles2syslog.runit /etc/service/logfiles2syslog/run
 
 Real life usage example with the RAILO Java Coldfusion interpreter
 ------------------------------------------------------------------
