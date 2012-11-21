@@ -11,7 +11,7 @@
 # Config file format (good old windows ini-style)
 # 
 # [base]
-# includedir = /etc/logfiles2syslog.d/
+# includedir = /etc/logfiles2syslog.conf.d/
 # rewatch_interval = 100
 # rewatch_interval_on_error = 10
 #
@@ -43,6 +43,29 @@ use Config::Tiny;
 
 # -----------------------------------------------------------------------------
 # INIT
+#
+# command line
+my $cfile = '/etc/logfiles2syslog.conf';
+if (scalar @ARGV) {
+	$cfile = shift @ARGV;
+}
+
+# load config
+my $conf;
+sub loadconfig {
+	$conf = Config::Tiny->read($cfile) or die "unable to open file $cfile: ".Config::Tiny->errstr;
+
+	die "no \[base\] section in config file $cfile" unless exists $conf->{base};
+	foreach (qw(rewatch_interval rewatch_interval_on_error includedir)) {
+		die "no $_ param in \[base\]" unless exists $conf->{base}->{$_};
+	}
+}
+
+loadconfig();
+
+exit;
+
+
 setlogsock('unix');
 openlog('filedump', 'cons', 'notice');
 
@@ -54,9 +77,7 @@ my @dirs = ();
 my %openfiles = qw();
 #my $filematch = m/\.log$/;
 
-sub reloadconfig {
-	open FILE,"/etc/logfiles2syslog.conf";
-}
+
 
 # -----------------------------------------------------------------------------
 # GENERIC LOOP
