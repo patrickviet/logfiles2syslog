@@ -56,9 +56,12 @@ You can change the directory, but you can't change the fact that it's log files
 
 So here is appropriate config:
 
+
 FILE: /etc/logfiles2syslog.conf.d/myrailoapp.conf
+```
 watchdir = /srv/www/mysite/WEB-INF/logs
 watchpattern = .log
+```
 
 And ... that's it
 You can now use syslog options and so on to be able to distribute railo logs to a central server.
